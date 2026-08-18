@@ -240,8 +240,8 @@ dc up -d
 # com o Traefik nas portas 80/443. O resultado era um "⚠ não consegui recriar o
 # proxy" em TODA atualização de quem usa proxy externo: alarme falso, num
 # momento em que o dono precisa confiar no que está lendo.
-if [ "${REVERSE_PROXY:-caddy}" = "traefik" ]; then
-  c_grn "✓ proxy externo (Traefik): o Caddy não é usado aqui — nada a recarregar"
+if [ "${REVERSE_PROXY:-caddy}" != "caddy" ]; then
+  c_grn "✓ proxy externo: o Caddy não é usado aqui — nada a recarregar"
 else
   dc up -d --force-recreate --no-deps caddy >/dev/null 2>&1 \
     && c_grn "✓ proxy recarregado com a configuração desta versão" \

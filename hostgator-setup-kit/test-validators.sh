@@ -1035,6 +1035,22 @@ dono_ok "contêiner desta instalação é IDENTIFICADO (com o projeto)" \
 dono_ok "contêiner sem label de compose mantém a imagem" \
   'meu-traefik||traefik:v3.1' 'meu-traefik||traefik:v3.1|0.0.0.0:80->80/tcp'
 
+echo "proxy reverso: modo none (painel próprio, ex. EasyPanel)"
+# dc_files()/dc() só desligam o Caddy quando REVERSE_PROXY=none — sem labels,
+# sem rede externa (o painel roteia pela própria UI). Regressão direta do
+# case/esac que substituiu o if/else de dois ramos em install.sh e _common.sh.
+dcf_ok() {  # dcf_ok <descrição> <REVERSE_PROXY> <esperado>
+  local desc="$1" real
+  real="$(REVERSE_PROXY="$2" dc_files)"
+  if [ "$real" = "$3" ]; then printf '  ✓ %s\n' "$desc"
+  else printf '  ✗ %s\n     deu:      [%s]\n     esperava: [%s]\n' "$desc" "$real" "$3"; fail=1; fi
+}
+dcf_ok "caddy (default): só o compose base" "caddy" "-f docker-compose.prod.yml"
+dcf_ok "traefik: base + override de labels" "traefik" \
+  "-f docker-compose.prod.yml -f docker-compose.traefik.yml"
+dcf_ok "none: base + override que só desliga o caddy" "none" \
+  "-f docker-compose.prod.yml -f docker-compose.no-proxy.yml"
+
 echo "proxy reverso: é um Traefik?"
 tk_ok() {  # tk_ok <descrição> <sim|nao> <imagem> <nome>
   local desc="$1" esperado="$2" real

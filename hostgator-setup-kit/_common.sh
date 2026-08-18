@@ -4,6 +4,7 @@ set -euo pipefail
 
 COMPOSE="docker-compose.prod.yml"
 COMPOSE_TRAEFIK="docker-compose.traefik.yml"
+COMPOSE_NO_PROXY="docker-compose.no-proxy.yml"
 
 # Proxy reverso desta instalação. Vem do .env (load_env), com default 'caddy' —
 # ou seja, toda instalação que já existe continua exatamente como está.
@@ -12,26 +13,29 @@ COMPOSE_TRAEFIK="docker-compose.traefik.yml"
 #   traefik → a VPS JÁ tem um Traefik nessas portas (Hostinger, Coolify,
 #             Dokploy...). Entra o override, que desliga o Caddy e publica o app
 #             por labels. Ver o cabeçalho de docker-compose.traefik.yml.
+#   none    → a VPS já tem um painel que roteia pela própria UI (EasyPanel e
+#             afins), sem ler labels de container. Só desliga o Caddy. Ver o
+#             cabeçalho de docker-compose.no-proxy.yml.
 #
 # Todo `docker compose` do kit passa por aqui: com proxy externo, um comando sem
-# o override subiria o Caddy e ele iria bater de frente com o Traefik.
+# o override subiria o Caddy e ele iria bater de frente com o proxy de fora.
 dc() {
-  if [ "${REVERSE_PROXY:-caddy}" = "traefik" ]; then
-    docker compose -f "$COMPOSE" -f "$COMPOSE_TRAEFIK" "$@"
-  else
-    docker compose -f "$COMPOSE" "$@"
-  fi
+  case "${REVERSE_PROXY:-caddy}" in
+  traefik) docker compose -f "$COMPOSE" -f "$COMPOSE_TRAEFIK" "$@" ;;
+  none)    docker compose -f "$COMPOSE" -f "$COMPOSE_NO_PROXY" "$@" ;;
+  *)       docker compose -f "$COMPOSE" "$@" ;;
+  esac
 }
 
 # A mesma lista de -f, como texto, para as mensagens que ensinam o comando ao
 # dono. Se a mensagem omitisse o override numa instalação com proxy externo, o
 # próprio dono derrubaria o site seguindo a instrução do kit.
 dc_files() {
-  if [ "${REVERSE_PROXY:-caddy}" = "traefik" ]; then
-    printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_TRAEFIK"
-  else
-    printf -- '-f %s' "$COMPOSE"
-  fi
+  case "${REVERSE_PROXY:-caddy}" in
+  traefik) printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_TRAEFIK" ;;
+  none)    printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_NO_PROXY" ;;
+  *)       printf -- '-f %s' "$COMPOSE" ;;
+  esac
 }
 
 # ── A rede externa por onde o proxy de fora alcança o app ────────────────────

@@ -1,0 +1,22 @@
+# DeskcommCRM — override para painel que roteia pela PRÓPRIA interface (EasyPanel,
+# Portainer com proxy, etc.), sem ler labels de container.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.no-proxy.yml up -d
+#
+# QUANDO USAR
+# -----------
+# docker-compose.traefik.yml serve quando o proxy externo é um Traefik com o
+# provider Docker ligado — ele enxerga labels em QUALQUER container do host,
+# então funciona mesmo fora da gestão do painel (é o caso Hostinger/Coolify/
+# Dokploy). Alguns painéis — EasyPanel é o caso conhecido — preferem que você
+# aponte serviço+porta pela UI deles em vez de labels, então as labels do
+# override acima não têm efeito ali.
+#
+# Este arquivo não faz roteamento nenhum: só desliga o Caddy embutido (que bate
+# de frente com o proxy do painel nas portas 80/443, do jeito que o override do
+# Traefik já faz — mesmo truque de profile, ver o cabeçalho de
+# docker-compose.traefik.yml). O painel se conecta à rede que o próprio compose
+# cria (`<projeto>_internal`) por fora; nada aqui precisa declarar essa rede.
+services:
+  caddy:
+    profiles: ["caddy-nao-usado-com-proxy-externo"]
