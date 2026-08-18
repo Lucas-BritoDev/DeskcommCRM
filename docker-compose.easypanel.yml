@@ -1,0 +1,13 @@
+# DeskcommCRM — arquivo único para painéis (EasyPanel e afins) cujo serviço
+# "Compose" só aceita UM caminho de docker-compose.yml, sem `-f` encadeado.
+#
+#   No painel: aponte "Arquivo Docker Compose" para este arquivo.
+#
+# Não duplica nada — só junta, via `include:` (Compose spec >= 2.20), o compose
+# de produção com o override que desliga o Caddy embutido (ver o cabeçalho de
+# docker-compose.no-proxy.yml para o porquê: o painel já tem o próprio proxy
+# nas portas 80/443, e o roteamento pro serviço `app` é configurado na UI dele,
+# não por labels).
+include:
+  - docker-compose.prod.yml
+  - docker-compose.no-proxy.yml

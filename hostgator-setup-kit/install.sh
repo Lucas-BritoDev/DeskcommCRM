@@ -22,6 +22,7 @@ COMUNIDADE_URL="https://lp-comunidade.automatiklabs.com.br"
 REPO_DIR="${REPO_DIR:-deskcommcrm}"
 COMPOSE="docker-compose.prod.yml"
 COMPOSE_TRAEFIK="docker-compose.traefik.yml"
+COMPOSE_NO_PROXY="docker-compose.no-proxy.yml"
 NONINTERACTIVE=0
 [ "${1:-}" = "--yes" ] && NONINTERACTIVE=1
 
@@ -29,18 +30,18 @@ NONINTERACTIVE=0
 # usar o _common.sh). As duas funções abaixo são gêmeas das de lá — se mexer
 # numa, mexa na outra.
 dc() {
-  if [ "${REVERSE_PROXY:-caddy}" = "traefik" ]; then
-    docker compose -f "$COMPOSE" -f "$COMPOSE_TRAEFIK" "$@"
-  else
-    docker compose -f "$COMPOSE" "$@"
-  fi
+  case "${REVERSE_PROXY:-caddy}" in
+  traefik) docker compose -f "$COMPOSE" -f "$COMPOSE_TRAEFIK" "$@" ;;
+  none)    docker compose -f "$COMPOSE" -f "$COMPOSE_NO_PROXY" "$@" ;;
+  *)       docker compose -f "$COMPOSE" "$@" ;;
+  esac
 }
 dc_files() {
-  if [ "${REVERSE_PROXY:-caddy}" = "traefik" ]; then
-    printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_TRAEFIK"
-  else
-    printf -- '-f %s' "$COMPOSE"
-  fi
+  case "${REVERSE_PROXY:-caddy}" in
+  traefik) printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_TRAEFIK" ;;
+  none)    printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_NO_PROXY" ;;
+  *)       printf -- '-f %s' "$COMPOSE" ;;
+  esac
 }
 
 # ── Aparência ───────────────────────────────────────────────────────────────
