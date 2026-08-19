@@ -140,7 +140,7 @@ export const AGENT_TOOL_DEFS = {
   },
   send_message: {
     description:
-      'Envia UMA mensagem de WhatsApp ao lead desta conversa. É o ÚNICO jeito de falar com o lead; texto fora desta tool nunca é enviado.',
+      'Envia UMA ÚNICA mensagem de WhatsApp ao lead desta conversa. Envie exatamente UMA mensagem e encerre o turno — NUNCA chame esta tool mais de uma vez no mesmo turno e NUNCA envie mensagens adicionais sem que o lead responda.',
     inputSchema: z.object({
       body: z.string().min(1).describe('corpo da mensagem, em pt-br, pronto para envio'),
     }),
@@ -300,7 +300,7 @@ export const MAX_VETOS_DE_VOCABULARIO_INTERNO = 2;
  * loop de tools (AGENT_MAX_STEPS) — e esse teto conta QUALQUER tool, não só envio.
  * Medido em produção: um lead recebeu 8 mensagens seguidas do mesmo turno.
  */
-export const DEFAULT_MAX_SENDS_PER_TURN = 3;
+export const DEFAULT_MAX_SENDS_PER_TURN = 1;
 
 /**
  * Job já saiu de 'running' por decisão do próprio run (ex.: cancelJob no veto
@@ -1776,7 +1776,7 @@ async function executarTurnoDoAgente(
             // disclosure via inject); é ELE que vai ao canal, não o `body` capturado da tool.
             send: (finalBody: string) =>
               sendInBubbles(finalBody, {
-                enabled: agentConfig?.splitMessages ?? false,
+                enabled: (agentConfig?.splitMessages ?? false) && maxSendsPerTurn > 1,
                 maxChars: agentConfig?.splitMaxChars ?? 600,
                 sleep: deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
                 jitter: () => 1200 + Math.floor(Math.random() * 800), // piso no throttle anti-ban (1.2s) — bolhas são mensagens físicas

@@ -164,7 +164,7 @@ const envSchema = z.object({
   AGENT_MAX_STEPS: z.coerce.number().int().positive().default(8),
   // Teto de mensagens FÍSICAS enviadas ao lead por turno (send_message + send_template
   // somados, bolhas incluídas) — nenhum gate de before-send limita CONTAGEM, só ritmo.
-  MAX_SENDS_PER_TURN: z.coerce.number().int().positive().default(3),
+  MAX_SENDS_PER_TURN: z.coerce.number().int().positive().default(1),
   // Circuit breaker de tools por run.
   TOOL_BREAKER_EXACT_WARN: z.coerce.number().int().positive().default(2),
   TOOL_BREAKER_EXACT_BLOCK: z.coerce.number().int().positive().default(5),
