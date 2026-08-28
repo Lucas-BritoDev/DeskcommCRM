@@ -137,3 +137,7 @@ backups/
 # commit posterior de remoção não tira o blob.
 .qa-backups/
 *.dump
+
+# Configurações com credenciais locais e dumps temporários
+opencode.json
+schema.json
