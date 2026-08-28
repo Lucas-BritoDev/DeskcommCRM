@@ -37,11 +37,11 @@ export async function importLeadsAction(input: ImportInput) {
       // Sanitizar telefone
       const safePhone = lead.phone.replace(/\D/g, "");
 
-      const { data: existingContact } = await supabase
+      const { data: existingContact, error: fetchErr } = await supabase
         .from("contacts")
         .select("id")
         .eq("organization_id", activeOrg.orgId)
-        .eq("phone", safePhone)
+        .eq("phone_number", safePhone)
         .maybeSingle();
 
       if (existingContact) {
@@ -54,13 +54,15 @@ export async function importLeadsAction(input: ImportInput) {
             id: cId,
             organization_id: activeOrg.orgId,
             name: lead.title,
-            phone: safePhone,
+            phone_number: safePhone,
             source: "import",
-            custom_fields: lead.custom_fields
+            source_metadata: lead.custom_fields
           });
         
         if (!cErr) {
           contactId = cId;
+        } else {
+          console.error("Erro ao criar contato:", cErr);
         }
       }
 
@@ -87,6 +89,8 @@ export async function importLeadsAction(input: ImportInput) {
         // 3. (Opcional) Enroll the lead on AI fallback if we had the agent IDs
         // Aqui apenas inserimos. O script batch de cron ("disparo-em-lote.ts") ou o sistema 
         // de Inbox pegará este Lead pois está no stage 'Novo'.
+      } else {
+        console.error("Erro ao criar lead:", lErr);
       }
     }
 
