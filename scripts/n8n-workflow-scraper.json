@@ -1,0 +1,94 @@
+{
+  "name": "Scraper Leads - Facebook + OLX",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "name": "A cada 2 horas",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "id": "schedule-1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://scraper:3001/run",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "source",
+              "value": "all"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "name": "Executar Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "id": "http-1"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "={{ $json.success ? 'Sucesso' : 'Erro' }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.message || 'Scraper executado' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Log Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 0],
+      "id": "set-1"
+    }
+  ],
+  "connections": {
+    "A cada 2 horas": {
+      "main": [
+        [
+          {
+            "node": "Executar Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar Scraper": {
+      "main": [
+        [
+          {
+            "node": "Log Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

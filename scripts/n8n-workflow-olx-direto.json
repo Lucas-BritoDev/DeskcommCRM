@@ -1,0 +1,152 @@
+{
+  "name": "OLX Salvador → CRM (sem Playwright)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "sched-1",
+      "name": "A cada 2 horas",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://www.olx.com.br/autos-e-pecas/carros-vans-e-utilitarios/estado-ba/salvador",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "pt-BR,pt;q=0.9"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "redirect": {
+            "followRedirects": true
+          }
+        }
+      },
+      "id": "http-olx",
+      "name": "Buscar OLX Salvador",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [300, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "let html = '';\nconst j = $input.first().json;\nif (typeof j.data === 'string') html = j.data;\nelse if (typeof j.body === 'string') html = j.body;\nelse if (typeof j === 'string') html = j;\nelse if (j.data && typeof j.data === 'object') html = JSON.stringify(j.data);\nelse html = JSON.stringify(j);\n\n// Se veio como objeto com chave 'data' que já é HTML, tá ok. Se não, tenta pegar raw\nif (!html.includes('<html') && !html.includes('__NEXT_DATA__')) {\n  // tentar outras chaves\n  const v = Object.values(j).find(v => typeof v === 'string' && v.length > 5000);\n  if (v) html = v;\n}\n\nconst leads = [];\n\n// 1) Tentar extrair via __NEXT_DATA__ (Next.js da OLX)\ntry {\n  const m = html.match(/<script id=\"__NEXT_DATA__\"[^>]*>([\\s\\S]*?)<\\/script>/);\n  if (m) {\n    const data = JSON.parse(m[1]);\n    // OLX varia: props.pageProps.ads ou .searchResults ou .initialData\n    const str = JSON.stringify(data);\n    // Regex para achar blocos de anúncio dentro do JSON\n    const titleRegex = /\"title\"\\s*:\\s*\"([^\"]+)\"/g;\n    const urlRegex = /\"url\"\\s*:\\s*\"([^\"]+\\/d\\/[^\"]+)\"/g;\n    const priceRegex = /\"price\"\\s*:\\s*\"?([\\d\\.]+)\"?/g;\n    // Heurística: tenta achar objetos com title+price juntos\n    const adBlocks = [...str.matchAll(/\\{[^\\{\\}]*\"title\"[^\\}]*\\}/g)];\n    for (const b of adBlocks.slice(0, 20)) {\n      try {\n        const obj = JSON.parse(b[0]);\n        if (obj.title && obj.title.length > 5) {\n          leads.push({ nome: obj.title.slice(0, 80), preco: obj.price || '', link: obj.url || '', fonte: 'olx' });\n        }\n      } catch {}\n    }\n  }\n} catch(e) {}\n\n// 2) Fallback: regex em HTML puro - links de anúncio OLX\nif (leads.length === 0) {\n  const linkRegex = /<a[^>]+href=\"([^\"]*\\/d\\/[^\"]*)\"[^>]*>([\\s\\S]*?)<\\/a>/gi;\n  let match;\n  let count = 0;\n  while ((match = linkRegex.exec(html)) !== null && count < 20) {\n    const href = match[1];\n    const inner = match[2];\n    // Extrair título do inner\n    const t = inner.match(/<h2[^>]*>([^<]+)<\\/h2>/i) || inner.match(/title=\"([^\"]+)\"/i);\n    const title = t ? t[1].trim() : (inner.replace(/<[^>]+>/g,'').trim().slice(0,60));\n    const priceM = inner.match(/R\\$\\s*[\\d\\.\\,]+/) || html.slice(match.index, match.index+500).match(/R\\$\\s*[\\d\\.\\,]+/);\n    if (title && title.length > 5) {\n      const fullUrl = href.startsWith('http') ? href : 'https://www.olx.com.br' + href;\n      leads.push({ nome: title.slice(0,80), preco: priceM ? priceM[0] : '', link: fullUrl, fonte: 'olx' });\n      count++;\n    }\n  }\n}\n\n// Deduplicar por nome\nconst seen = new Set();\nconst uniq = leads.filter(l => { if (seen.has(l.nome)) return false; seen.add(l.nome); return true; });\n\nif (uniq.length === 0) {\n  return [{ json: { warning: 'Nenhum anúncio extraído', html_preview: html.slice(0, 500) } }];\n}\n\nreturn uniq.map(l => ({ json: l }));"
+      },
+      "id": "code-parse",
+      "name": "Extrair Anuncios",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://embvktizhhghyedcphok.supabase.co/rest/v1/contacts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtYnZrdGl6aGhnaHllZGNwaG9rIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzA3MjcxMywiZXhwIjoyMTAyNjQ4NzEzfQ.cLK8TUOCDDDs-BYCEStF329m4W43nCA22cVMmKQpxCQ"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtYnZrdGl6aGhnaHllZGNwaG9rIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzA3MjcxMywiZXhwIjoyMTAyNjQ4NzEzfQ.cLK8TUOCDDDs-BYCEStF329m4W43nCA22cVMmKQpxCQ"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "organization_id",
+              "value": "7e8ab2d5-4ebf-487b-a63c-3cfaf2311fb1"
+            },
+            {
+              "name": "name",
+              "value": "={{ $json.nome }}"
+            },
+            {
+              "name": "source",
+              "value": "olx"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "http-supabase",
+      "name": "Criar Contato no CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 0]
+    }
+  ],
+  "connections": {
+    "A cada 2 horas": {
+      "main": [
+        [
+          {
+            "node": "Buscar OLX Salvador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar OLX Salvador": {
+      "main": [
+        [
+          {
+            "node": "Extrair Anuncios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair Anuncios": {
+      "main": [
+        [
+          {
+            "node": "Criar Contato no CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -108,3 +108,7 @@ evidence/.sonda-score-residuo.json
 
 # sessão reusada pelas jornadas (contém tokens)
 .auth/
+
+# Configurações com credenciais locais e dumps temporários
+opencode.json
+schema.json
