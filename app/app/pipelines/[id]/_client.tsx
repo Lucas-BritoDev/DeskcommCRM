@@ -23,6 +23,7 @@ import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { FilterBar } from "@/components/kanban/FilterBar";
 import { BulkActionBar } from "@/components/kanban/BulkActionBar";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
+import { LeadImportModal } from "@/app/app/_components/LeadImportModal";
 import { Button } from "@/components/ui/button";
 import { Plus } from "@/lib/ui/icons";
 import type { LeadFilters } from "@/lib/kanban/filters";
@@ -49,6 +50,7 @@ export function PipelinePageClient({
   );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [newOpen, setNewOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const filteredLeads = data ? applyFilters(data.leads, filters) : [];
 
@@ -82,17 +84,30 @@ export function PipelinePageClient({
         <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">
           {data?.pipeline.name ?? initialName}
         </h1>
-        <Button onClick={() => setNewOpen(true)} disabled={!data} className="shrink-0">
-          <Plus size={16} className="mr-2" /> Novo Lead
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="outline" onClick={() => setImportOpen(true)} disabled={!data}>
+            Importar Leads
+          </Button>
+          <Button onClick={() => setNewOpen(true)} disabled={!data}>
+            <Plus size={16} className="mr-2" /> Novo Lead
+          </Button>
+        </div>
       </header>
       {data && (
-        <NewLeadDialog
-          open={newOpen}
-          onOpenChange={setNewOpen}
-          pipelineId={pipelineId}
-          stages={data.stages}
-        />
+        <>
+          <NewLeadDialog
+            open={newOpen}
+            onOpenChange={setNewOpen}
+            pipelineId={pipelineId}
+            stages={data.stages}
+          />
+          <LeadImportModal
+            open={importOpen}
+            onOpenChange={setImportOpen}
+            pipelineId={pipelineId}
+            stageId={data.stages.find(s => !s.is_won && !s.is_lost && !s.is_archived)?.id ?? data.stages[0]?.id ?? ""}
+          />
+        </>
       )}
       <FilterBar filters={filters} onChange={setFilters} leads={data?.leads ?? []} />
       {error ? (
