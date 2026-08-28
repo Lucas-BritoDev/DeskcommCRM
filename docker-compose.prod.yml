@@ -208,6 +208,31 @@ services:
     logging: *default-logging
     networks: [internal]
 
+  scraper:
+    # Scraper de leads - Facebook Marketplace + OLX
+    # Acionado pelo n8n a cada 2 horas via HTTP POST /run
+    mem_limit: 512m
+    image: ${SCRAPER_IMAGE:-ghcr.io/melgarafael/deskcomm-scraper:stable}
+    build:
+      context: .
+      dockerfile: scripts/Dockerfile.scraper
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "3001"
+      SUPABASE_URL: ${SUPABASE_URL:-https://embvktizhhghyedcphok.supabase.co}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      ORG_ID: ${ORG_ID:-7e8ab2d5-4ebf-487b-a63c-3cfaf2311fb1}
+      CHANNEL_SESSION_ID: ${CHANNEL_SESSION_ID:-c9a44dd2-a0f9-4022-8001-7bacc947e025}
+      WHATSAPP_PHONE: ${WHATSAPP_PHONE:-5511926753226}
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(3001,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+    networks: [internal]
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped

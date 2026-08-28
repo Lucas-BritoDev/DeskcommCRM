@@ -1,0 +1,22 @@
+FROM mcr.microsoft.com/playwright:v1.50.1-noble
+
+WORKDIR /app
+
+# Copiar package.json e instalar dependências
+COPY package.json ./
+RUN npm install --omit=dev playwright
+
+# Copiar scripts
+COPY scripts/scrape-leads.js ./scripts/
+COPY scripts/scraper-server.js ./scripts/
+
+# Variáveis de ambiente
+ENV PORT=3001
+ENV SUPABASE_URL=https://embvktizhhghyedcphok.supabase.co
+ENV ORG_ID=7e8ab2d5-4ebf-487b-a63c-3cfaf2311fb1
+ENV CHANNEL_SESSION_ID=c9a44dd2-a0f9-4022-8001-7bacc947e025
+ENV WHATSAPP_PHONE=5511926753226
+
+EXPOSE 3001
+
+CMD ["node", "scripts/scraper-server.js"]
