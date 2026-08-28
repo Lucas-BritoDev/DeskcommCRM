@@ -1,7 +1,7 @@
 "use server";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { randomUUID } from "node:crypto";
 import { audit } from "@/lib/audit";
 
@@ -17,38 +17,59 @@ interface ImportInput {
   leads: ImportLeadPayload[];
 }
 
+/**
+ * Server Action para importar leads a partir de planilha.
+ *
+ * Usa admin client (service role) pois o insert de contacts+leads
+ * precisa passar pelo RLS sem depender de policies de escrita do
+ * papel do usuário. O organization_id é resolvido da sessão
+ * autenticada (fonte confiável), nunca do payload.
+ */
 export async function importLeadsAction(input: ImportInput) {
+  const errors: string[] = [];
+
   try {
     const user = await requireAuth();
     const activeOrg = await resolveActiveOrg(user);
-    if (!activeOrg) throw new Error("Organização não encontrada");
+    if (!activeOrg) return { ok: false, error: "Organização não encontrada", importedCount: 0 };
 
-    const supabase = await createClient();
-    
-    // Batch Insert Contacts and Leads
+    const admin = createAdminClient();
+
     let importedCount = 0;
 
     for (const lead of input.leads) {
-      if (!lead.phone) continue;
+      if (!lead.phone) {
+        errors.push(`Lead "${lead.title}" ignorado — sem telefone.`);
+        continue;
+      }
+
+      // Sanitizar telefone: apenas dígitos
+      const safePhone = lead.phone.replace(/\D/g, "");
+      if (safePhone.length < 10) {
+        errors.push(`Lead "${lead.title}" ignorado — telefone "${lead.phone}" muito curto.`);
+        continue;
+      }
 
       // 1. Procurar ou Criar Contato
       let contactId: string | null = null;
-      
-      // Sanitizar telefone
-      const safePhone = lead.phone.replace(/\D/g, "");
 
-      const { data: existingContact, error: fetchErr } = await supabase
+      const { data: existingContact, error: fetchErr } = await admin
         .from("contacts")
         .select("id")
         .eq("organization_id", activeOrg.orgId)
         .eq("phone_number", safePhone)
         .maybeSingle();
 
+      if (fetchErr) {
+        errors.push(`Erro ao buscar contato "${lead.title}": ${fetchErr.message}`);
+        continue;
+      }
+
       if (existingContact) {
         contactId = existingContact.id;
       } else {
         const cId = randomUUID();
-        const { error: cErr } = await supabase
+        const { error: cErr } = await admin
           .from("contacts")
           .insert({
             id: cId,
@@ -56,21 +77,32 @@ export async function importLeadsAction(input: ImportInput) {
             name: lead.title,
             phone_number: safePhone,
             source: "import",
-            source_metadata: lead.custom_fields
           });
-        
-        if (!cErr) {
-          contactId = cId;
-        } else {
-          console.error("Erro ao criar contato:", cErr);
+
+        if (cErr) {
+          errors.push(`Erro ao criar contato "${lead.title}": ${cErr.message}`);
+          continue;
         }
+        contactId = cId;
       }
 
-      if (!contactId) continue;
+      // 2. Checar se já existe lead para este contato neste pipeline
+      const { data: existingLead } = await admin
+        .from("crm_leads")
+        .select("id")
+        .eq("organization_id", activeOrg.orgId)
+        .eq("pipeline_id", input.pipelineId)
+        .eq("contact_id", contactId)
+        .maybeSingle();
 
-      // 2. Criar Lead
+      if (existingLead) {
+        errors.push(`Lead "${lead.title}" já existe neste funil (contato duplicado).`);
+        continue;
+      }
+
+      // 3. Criar Lead
       const leadId = randomUUID();
-      const { error: lErr } = await supabase
+      const { error: lErr } = await admin
         .from("crm_leads")
         .insert({
           id: leadId,
@@ -80,18 +112,15 @@ export async function importLeadsAction(input: ImportInput) {
           title: lead.title,
           contact_id: contactId,
           source: "import",
-          owner_user_id: user.id
+          created_by_user_id: user.id,
         });
 
-      if (!lErr) {
-        importedCount++;
-        
-        // 3. (Opcional) Enroll the lead on AI fallback if we had the agent IDs
-        // Aqui apenas inserimos. O script batch de cron ("disparo-em-lote.ts") ou o sistema 
-        // de Inbox pegará este Lead pois está no stage 'Novo'.
-      } else {
-        console.error("Erro ao criar lead:", lErr);
+      if (lErr) {
+        errors.push(`Erro ao criar lead "${lead.title}": ${lErr.message}`);
+        continue;
       }
+
+      importedCount++;
     }
 
     await audit({
@@ -101,12 +130,19 @@ export async function importLeadsAction(input: ImportInput) {
       resourceType: "crm_pipeline",
       resourceId: input.pipelineId,
       requestId: `import-${Date.now()}`,
-      metadata: { count: importedCount, stage: input.stageId }
+      metadata: { count: importedCount, stage: input.stageId, errors: errors.length },
     });
 
-    return { ok: true, importedCount };
+    if (importedCount === 0 && errors.length > 0) {
+      return { ok: false, error: errors.join(" | "), importedCount: 0 };
+    }
+
+    return {
+      ok: true,
+      importedCount,
+      warnings: errors.length > 0 ? errors : undefined,
+    };
   } catch (error: any) {
-    console.error("Import error", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: error.message || "Erro desconhecido", importedCount: 0 };
   }
 }

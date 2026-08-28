@@ -97,12 +97,20 @@ export function LeadImportModal({ open, onOpenChange, pipelineId, stageId }: Pro
       });
 
       if (!result.ok) {
-        throw new Error(result.error);
+        toast.error(result.error || "Erro ao importar leads.");
+        return;
       }
 
       toast.success(`${result.importedCount} leads importados com sucesso!`);
+
+      if (result.warnings && result.warnings.length > 0) {
+        for (const w of result.warnings.slice(0, 3)) {
+          toast.warning(w);
+        }
+      }
+
       onOpenChange(false);
-      window.location.reload(); // Recarrega para ver os leads novos
+      window.location.reload();
     } catch (err: any) {
       toast.error(err.message || "Erro desconhecido ao importar");
     } finally {
