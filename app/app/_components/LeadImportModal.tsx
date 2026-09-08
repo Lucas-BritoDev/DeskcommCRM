@@ -27,7 +27,7 @@ interface Props {
 interface ParsedLead {
   name: string;
   phone: string;
-  [key: string]: any;
+  raw?: Record<string, unknown>;
 }
 
 export function LeadImportModal({ open, onOpenChange, pipelineId, stageId }: Props) {
@@ -51,7 +51,7 @@ export function LeadImportModal({ open, onOpenChange, pipelineId, stageId }: Pro
         if (!ws) throw new Error("Aba da planilha não encontrada");
         
         // Converte para JSON. Assume cabeçalhos na primeira linha.
-        const data = utils.sheet_to_json(ws) as Record<string, any>[];
+        const data = utils.sheet_to_json(ws) as Record<string, unknown>[];
         
         const mapped: ParsedLead[] = data.map(row => {
           // Tentando encontrar colunas típicas de nome e telefone
@@ -111,8 +111,8 @@ export function LeadImportModal({ open, onOpenChange, pipelineId, stageId }: Pro
 
       onOpenChange(false);
       window.location.reload();
-    } catch (err: any) {
-      toast.error(err.message || "Erro desconhecido ao importar");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro desconhecido ao importar");
     } finally {
       setLoading(false);
     }

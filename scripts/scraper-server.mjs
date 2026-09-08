@@ -9,9 +9,12 @@
  * Porta: 3001 (configurável via PORT)
  */
 
-const http = require("http");
-const { execFile } = require("child_process");
-const path = require("path");
+import http from "node:http";
+import { execFile } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = process.env.PORT || 3001;
 
@@ -39,7 +42,7 @@ const server = http.createServer((req, res) => {
 
       console.log(`[${new Date().toISOString()}] Executando scraper para: ${source}`);
 
-      const scriptPath = path.join(__dirname, "scrape-leads.js");
+      const scriptPath = path.join(__dirname, "scrape-leads.mjs");
       execFile("node", [scriptPath, source], { timeout: 300000 }, (error, stdout, stderr) => {
         if (error) {
           console.error("Erro no scraper:", error.message);
@@ -63,7 +66,7 @@ const server = http.createServer((req, res) => {
 });
 
 function runScraper(source = "all") {
-  const scriptPath = path.join(__dirname, "scrape-leads.js");
+  const scriptPath = path.join(__dirname, "scrape-leads.mjs");
   console.log(`[${new Date().toISOString()}] Agendado: executando scraper (${source})...`);
   execFile("node", [scriptPath, source], { timeout: 300000 }, (error, stdout, stderr) => {
     if (error) console.error(`[CRON] Erro: ${error.message}\n${stderr}`);

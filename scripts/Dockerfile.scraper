@@ -7,8 +7,8 @@ COPY package.json ./
 RUN npm install --omit=dev playwright
 
 # Copiar scripts
-COPY scripts/scrape-leads.js ./scripts/
-COPY scripts/scraper-server.js ./scripts/
+COPY scripts/scrape-leads.mjs ./scripts/
+COPY scripts/scraper-server.mjs ./scripts/
 
 # Variáveis de ambiente
 ENV PORT=3001
@@ -19,4 +19,4 @@ ENV WHATSAPP_PHONE=5511926753226
 
 EXPOSE 3001
 
-CMD ["node", "scripts/scraper-server.js"]
+CMD ["node", "scripts/scraper-server.mjs"]

@@ -8,7 +8,7 @@ import { audit } from "@/lib/audit";
 interface ImportLeadPayload {
   title: string;
   phone: string;
-  custom_fields?: any;
+  custom_fields?: Record<string, unknown>;
 }
 
 interface ImportInput {
@@ -142,7 +142,8 @@ export async function importLeadsAction(input: ImportInput) {
       importedCount,
       warnings: errors.length > 0 ? errors : undefined,
     };
-  } catch (error: any) {
-    return { ok: false, error: error.message || "Erro desconhecido", importedCount: 0 };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Erro desconhecido";
+    return { ok: false, error: message, importedCount: 0 };
   }
 }

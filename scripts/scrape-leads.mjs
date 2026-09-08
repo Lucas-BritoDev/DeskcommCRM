@@ -13,12 +13,12 @@
  *   WHATSAPP_PHONE=5511926753226
  *
  * Uso:
- *   node scripts/scrape-leads.js              # roda ambos
- *   node scripts/scrape-leads.js facebook     # só Facebook
- *   node scripts/scrape-leads.js olx          # só OLX
+ *   node scripts/scrape-leads.mjs              # roda ambos
+ *   node scripts/scrape-leads.mjs facebook     # só Facebook
+ *   node scripts/scrape-leads.mjs olx          # só OLX
  */
 
-const { chromium } = require("playwright");
+import { chromium } from "playwright";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://embvktizhhghyedcphok.supabase.co";
