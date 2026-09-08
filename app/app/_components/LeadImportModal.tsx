@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { read, utils } from "xlsx";
 import { toast } from "sonner";
+import { useT } from "@/hooks/i18n/useT";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +32,7 @@ interface ParsedLead {
 }
 
 export function LeadImportModal({ open, onOpenChange, pipelineId, stageId }: Props) {
+  const t = useT();
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ParsedLead[]>([]);
@@ -69,8 +71,8 @@ export function LeadImportModal({ open, onOpenChange, pipelineId, stageId }: Pro
         }).filter(r => r.name || r.phone); // Pelo menos um dos dois
 
         setPreview(mapped);
-      } catch (err) {
-        toast.error("Falha ao ler o arquivo. Certifique-se de que é um Excel ou CSV válido.");
+      } catch {
+        toast.error(t("Falha ao ler o arquivo. Certifique-se de que é um Excel ou CSV válido."));
         setFile(null);
         setPreview([]);
       }
@@ -80,7 +82,7 @@ export function LeadImportModal({ open, onOpenChange, pipelineId, stageId }: Pro
 
   async function handleImport() {
     if (preview.length === 0) {
-      toast.error("Nenhum lead encontrado na planilha.");
+      toast.error(t("Nenhum lead encontrado na planilha."));
       return;
     }
 
@@ -97,11 +99,11 @@ export function LeadImportModal({ open, onOpenChange, pipelineId, stageId }: Pro
       });
 
       if (!result.ok) {
-        toast.error(result.error || "Erro ao importar leads.");
+        toast.error(result.error || t("Erro ao importar leads."));
         return;
       }
 
-      toast.success(`${result.importedCount} leads importados com sucesso!`);
+      toast.success(`${result.importedCount} ${t("leads importados com sucesso!")}`);
 
       if (result.warnings && result.warnings.length > 0) {
         for (const w of result.warnings.slice(0, 3)) {
@@ -112,7 +114,7 @@ export function LeadImportModal({ open, onOpenChange, pipelineId, stageId }: Pro
       onOpenChange(false);
       window.location.reload();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Erro desconhecido ao importar");
+      toast.error(err instanceof Error ? err.message : t("Erro desconhecido ao importar"));
     } finally {
       setLoading(false);
     }
@@ -122,32 +124,36 @@ export function LeadImportModal({ open, onOpenChange, pipelineId, stageId }: Pro
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Importar Leads</DialogTitle>
+          <DialogTitle>{t("Importar Leads")}</DialogTitle>
           <DialogDescription>
-            Faça upload de uma planilha (Excel ou CSV) contendo os leads. O sistema tentará localizar as colunas de "Nome" e "Telefone/Celular".
+            {t(
+              "Faça upload de uma planilha (Excel ou CSV) contendo os leads. O sistema tentará localizar as colunas de \"Nome\" e \"Telefone/Celular\".",
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
           <div className="grid w-full max-w-sm items-center gap-1.5">
-            <Label htmlFor="file">Arquivo de Planilha</Label>
+            <Label htmlFor="file">{t("Arquivo de Planilha")}</Label>
             <Input id="file" type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} disabled={loading} />
           </div>
 
           {preview.length > 0 && (
             <div className="rounded-md border p-4 bg-muted/50 text-sm">
-              <p className="font-medium mb-2">Pré-visualização ({preview.length} encontrados):</p>
+              <p className="font-medium mb-2">
+                {t("Pré-visualização")} ({preview.length} {t("encontrados")}):
+              </p>
               <ul className="max-h-[150px] overflow-auto space-y-1">
                 {preview.slice(0, 5).map((l, i) => (
                   <li key={i} className="flex justify-between border-b pb-1">
-                    <span>{l.name || "(Sem nome)"}</span>
-                    <span className="text-muted-foreground">{l.phone || "(Sem tel)"}</span>
+                    <span>{l.name || t("(Sem nome)")}</span>
+                    <span className="text-muted-foreground">{l.phone || t("(Sem tel)")}</span>
                   </li>
                 ))}
                 {preview.length > 5 && (
-                  <li className="text-center text-xs text-muted-foreground pt-2">
-                    E mais {preview.length - 5} leads...
-                  </li>
+                    <li className="text-center text-xs text-muted-foreground pt-2">
+                      {t("E mais")} {preview.length - 5} leads...
+                    </li>
                 )}
               </ul>
             </div>
@@ -155,13 +161,13 @@ export function LeadImportModal({ open, onOpenChange, pipelineId, stageId }: Pro
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
-            Cancelar
-          </Button>
-          <Button onClick={handleImport} disabled={loading || preview.length === 0}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Confirmar Importação
-          </Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+              {t("Cancelar")}
+            </Button>
+            <Button onClick={handleImport} disabled={loading || preview.length === 0}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {t("Confirmar Importação")}
+            </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
