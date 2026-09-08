@@ -2,9 +2,8 @@ FROM mcr.microsoft.com/playwright:v1.50.1-noble
 
 WORKDIR /app
 
-# Copiar package.json e instalar dependências
-COPY package.json ./
-RUN npm install --omit=dev playwright
+# Inicializar ambiente isolado e instalar apenas o playwright
+RUN npm init -y && npm install --omit=dev playwright
 
 # Copiar scripts
 COPY scripts/scrape-leads.mjs ./scripts/
