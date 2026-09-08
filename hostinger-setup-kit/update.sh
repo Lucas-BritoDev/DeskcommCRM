@@ -69,6 +69,7 @@ while [ $# -gt 0 ]; do
     --skip-db) SKIP_DB=1 ;;
     --skip-push) SKIP_PUSH=1 ;;
     --webhook) shift; CUSTOM_WEBHOOK="${1:-}" ;;
+    --db-url) shift; DB_URL="${1:-}" ;;
     -h|--help)
       cat <<HELP
 Uso: bash hostinger-setup-kit/update.sh [opções]
@@ -77,11 +78,13 @@ Opções:
   --skip-db       Pula a execução de migrations/baseline no banco de dados.
   --skip-push     Não envia as branches para o GitHub (útil para teste local).
   --webhook <url> URL do webhook de deploy do EasyPanel para disparo automático.
+  --db-url <url>  Connection string do Postgres (caso não esteja no .env).
   -h, --help      Exibe esta tela de ajuda.
 
 Exemplos:
   bash hostinger-setup-kit/update.sh
   bash hostinger-setup-kit/update.sh --skip-db
+  bash hostinger-setup-kit/update.sh --db-url "postgresql://postgres:senha@host:5432/postgres"
 HELP
       exit 0
       ;;
@@ -291,13 +294,9 @@ log_step "Passo 5/5: Banco de dados e Deploy"
 # Carregar variáveis do .env se existir
 if [ -f "$PROJECT_DIR/.env" ]; then
   # Extração segura de variáveis de conexão
-  DB_URL="$(grep -E '^SUPABASE_DB_ADMIN_URL=' "$PROJECT_DIR/.env" | cut -d '=' -f2- | tr -d '"' | tr -d "'" || true)"
-  if [ -z "$DB_URL" ]; then
-    DB_URL="$(grep -E '^SUPABASE_DB_URL=' "$PROJECT_DIR/.env" | cut -d '=' -f2- | tr -d '"' | tr -d "'" || true)"
-  fi
-  if [ -z "$DB_URL" ]; then
-    DB_URL="$(grep -E '^DATABASE_URL=' "$PROJECT_DIR/.env" | cut -d '=' -f2- | tr -d '"' | tr -d "'" || true)"
-  fi
+  [ -z "$DB_URL" ] && DB_URL="$(grep -E '^SUPABASE_DB_ADMIN_URL=' "$PROJECT_DIR/.env" | cut -d '=' -f2- | tr -d '"' | tr -d "'" || true)"
+  [ -z "$DB_URL" ] && DB_URL="$(grep -E '^SUPABASE_DB_URL=' "$PROJECT_DIR/.env" | cut -d '=' -f2- | tr -d '"' | tr -d "'" || true)"
+  [ -z "$DB_URL" ] && DB_URL="$(grep -E '^DATABASE_URL=' "$PROJECT_DIR/.env" | cut -d '=' -f2- | tr -d '"' | tr -d "'" || true)"
   
   ENV_WEBHOOK="$(grep -E '^EASYPANEL_WEBHOOK_URL=' "$PROJECT_DIR/.env" | cut -d '=' -f2- | tr -d '"' | tr -d "'" || true)"
   if [ -z "$CUSTOM_WEBHOOK" ] && [ -n "$ENV_WEBHOOK" ]; then
@@ -305,11 +304,15 @@ if [ -f "$PROJECT_DIR/.env" ]; then
   fi
 fi
 
+# Fallback para variáveis já exportadas no ambiente shell
+[ -z "$DB_URL" ] && DB_URL="${SUPABASE_DB_ADMIN_URL:-${SUPABASE_DB_URL:-${DATABASE_URL:-}}}"
+[ -z "$CUSTOM_WEBHOOK" ] && CUSTOM_WEBHOOK="${EASYPANEL_WEBHOOK_URL:-}"
+
 # 5.1 — Atualização do Banco de Dados
 if [ "$SKIP_DB" -eq 1 ]; then
   log_warn "Etapa de banco de dados pulada (--skip-db)."
 elif [ -n "${DB_URL:-}" ]; then
-  printf "  Conexão de banco detectada no .env. Aplicando extensões e baseline...\n"
+  printf "  Conexão de banco identificada. Aplicando extensões e baseline...\n"
   
   RUN_SQL=""
   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
@@ -324,10 +327,9 @@ elif [ -n "${DB_URL:-}" ]; then
       "create extension if not exists vector with schema public; create extension if not exists citext with schema public; create extension if not exists pg_trgm with schema public;" \
       >/dev/null 2>&1 || true
 
-    # Baseline idempotente
+    # Baseline idempotente (alimentado por stdin para compatibilidade universal Linux/Windows)
     if [ -f "$PROJECT_DIR/supabase/baseline.sql" ]; then
-      raw="$(docker run --rm -i -v "$PROJECT_DIR/supabase/baseline.sql:/b.sql:ro" \
-            postgres:17-alpine psql "$DB_URL" -f /b.sql 2>&1 || true)"
+      raw="$(docker run --rm -i postgres:17-alpine psql "$DB_URL" < "$PROJECT_DIR/supabase/baseline.sql" 2>&1 || true)"
       
       benign='already exists|multiple primary keys|multiple default values|is already a member|already a partition'
       unexpected="$(printf '%s\n' "$raw" | grep -iE 'ERROR|FATAL' | grep -viE "$benign" || true)"
