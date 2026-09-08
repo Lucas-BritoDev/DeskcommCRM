@@ -9,6 +9,7 @@ Kit de automação e utilitários operacionais para gerenciar, sincronizar, faze
 | Script | O que ele faz |
 | :--- | :--- |
 | **`update.sh`** | Ciclo completo: sincroniza com o repositório oficial, rebaseia suas customizações, atualiza a branch de deploy do EasyPanel, aplica o banco (`baseline.sql`) e aciona o deploy. |
+| **`agent.sh`** | Agente de atualização em segundo plano que roda no `cron` da VPS. Ele descobre novas versões do upstream e faz aparecer o botão de "Nova versão" na barra lateral do CRM! |
 | **`backup.sh`** | Gera dump compactado do banco PostgreSQL (`.sql.gz`) + arquivo das sessões ativas do WhatsApp WAHA (`.tgz`), mantendo os últimos 14 backups. |
 | **`restore.sh`** | Restaura o banco de dados a partir de um arquivo de backup previamente gerado. |
 | **`reset-password.sh`** | Redefine a senha de um usuário ou administrador caso você seja trancado para fora do CRM. |
@@ -115,3 +116,31 @@ A partir desse momento, toda vez que você rodar `bash hostinger-setup-kit/updat
 3. Atualizar a branch do EasyPanel no GitHub
 4. Aplicar o banco de dados
 5. Disparar a implantação na VPS de forma 100% automática!
+
+---
+
+## 6. 🔔 Como Habilitar o Botão "Nova Versão" na Sidebar do CRM
+
+No CRM oficial, o rodapé da barra lateral esquerda mostra a versão instalada. Quando surge uma versão nova, ele acende um aviso pulsante **"Nova versão · 1.17.x"** que permite ao dono atualizar com um único clique.
+
+### Como funciona essa engrenagem:
+1. **Segurança:** O contêiner web não tem acesso root ao servidor. Quem faz a ponte é o script `hostinger-setup-kit/agent.sh`.
+2. **Heartbeat:** O `agent.sh` roda a cada 5 minutos no Linux da VPS via `crontab`. Ele verifica se o Rafael Melgaço lançou novas tags, envia esse status para o CRM e pergunta se alguém clicou no botão de atualizar.
+3. **Clique do Dono:** Quando você clica em "Atualizar agora" na tela de Configurações › Atualização, a VPS é notificada no próximo ciclo do agente e executa a atualização preservando as suas customizações.
+
+### Como ativar na sua VPS Hostinger:
+1. Conecte na sua VPS via SSH:
+   ```bash
+   ssh root@seu-ip-da-hostinger
+   ```
+2. Abra o agendador de tarefas do Linux:
+   ```bash
+   crontab -e
+   ```
+3. Adicione a linha abaixo no final do arquivo (substituindo pelo caminho onde o CRM está clonado):
+   ```cron
+   */5 * * * * cd /caminho/do/DeskcommCRM && bash hostinger-setup-kit/agent.sh >/dev/null 2>&1
+   ```
+4. Salve e saia (no nano: `Ctrl + O`, `Enter`, `Ctrl + X`).
+
+Pronto! A partir desse momento, sempre que o repositório oficial lançar uma atualização, o seu CRM detectará automaticamente e exibirá o botão na barra lateral para você atualizar direto pela interface web!
