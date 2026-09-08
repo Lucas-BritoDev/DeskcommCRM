@@ -16071,7 +16071,7 @@ declare
 begin
   select id into v_id
     from skill_versions
-   where organization_id is null and name = 'agendamento' and md5(body) = v_md5
+   where organization_id is null and name = 'agendamento' and md5(replace(body, chr(13), '')) = v_md5
    limit 1;
 
   if v_id is null then
@@ -16080,7 +16080,7 @@ begin
       null,
       'agendamento',
       'Playbook pra marcar/remarcar horário (consulta, visita, sessão) — consulta a agenda real pelas ferramentas quando elas existem, nunca inventa disponibilidade, e confirma por escrito antes de fechar.',
-      $body$# Playbook: marcar horário/agendamento
+      replace($body$# Playbook: marcar horário/agendamento
 
 ## Quando usar
 O lead pede pra marcar um horário, consulta, visita, demonstração ou sessão —
@@ -16177,12 +16177,12 @@ forçado. Inventar é pior do que demorar um instante a mais para responder.
 - Não pergunte "qual horário você prefere?" sem oferecer opções concretas quando
   você tem a agenda.
 - Não confirme agendamento sem resposta explícita do lead.
-- Não invente disponibilidade que você não checou.$body$,
+- Não invente disponibilidade que você não checou.$body$, chr(13), ''),
       '{"any_keywords": ["agendar", "marcar horário", "marcar consulta", "marcar uma visita", "agenda", "que horas vocês", "horário disponível", "remarcar", "reagendar", "cancelar o horário", "desmarcar"], "probe_keywords": ["que horas", "qual dia", "tem vaga", "disponibilidade"]}'::jsonb
     )
     returning id into v_id;
 
-    if (select md5(body) from skill_versions where id = v_id) is distinct from v_md5 then
+    if (select md5(replace(body, chr(13), '')) from skill_versions where id = v_id) is distinct from v_md5 then
       raise exception 'playbook agendamento: o md5 declarado (%) nao corresponde ao corpo inserido. Recalcule antes de publicar.', v_md5;
     end if;
   end if;
