@@ -147,6 +147,10 @@ describe("a fronteira de rede do que o cliente instala", () => {
         "caddy",
         "redis",
         "scheduler",
+        // `scraper` é o raspador de leads do fork (serviço `raspador` no EasyPanel):
+        // sem `ports:`, sem label, sem `network_mode: host` — passa nas réguas
+        // abaixo como qualquer serviço interno, e some daqui só se sair do compose.
+        "scraper",
         "srh",
         "voice-agent",
         "wacalls",
