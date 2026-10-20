@@ -5,7 +5,11 @@ import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { InboxLayout } from "@/components/inbox/InboxLayout";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
-import { lerRascunho, type AvisoDeRascunho } from "@/lib/inbox/rascunho-sugerido";
+import {
+  lerRascunho,
+  lerUltimoRascunhoAtivo,
+  type AvisoDeRascunho,
+} from "@/lib/inbox/rascunho-sugerido";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Inbox" };
@@ -39,23 +43,32 @@ export default async function InboxPage({
     );
   }
   const { id, rascunho } = await searchParams;
-  // ?rascunho= é a ponta da caixa de entrada da issue #1611: o texto mora no
-  // servidor, e a URL só carrega o ID. Aqui a leitura acontece com a SESSÃO do
-  // atendente (RLS), então um rascunho de outra organização vira
-  // "não encontrado" por construção. Os três recusos (outra conversa, já usado,
-  // vencido) viram aviso — a issue pede a conversa abrindo "sem texto e com
-  // aviso", e silenciar faria o atendente achar que o texto nunca existiu.
+  // ?rascunho= é a ponta da caixa de entrada da issue #1611.
+  // Quando omitido, busca automaticamente se a conversa já possui um rascunho ativo não consumido.
   let avisoDeRascunho: AvisoDeRascunho | null = null;
-  if (rascunho && id) {
+  if (id) {
     const db = await createClient();
-    avisoDeRascunho = {
-      conversationId: id,
-      leitura: await lerRascunho(db, {
+    if (rascunho) {
+      avisoDeRascunho = {
+        conversationId: id,
+        leitura: await lerRascunho(db, {
+          organizationId: activeOrg.orgId,
+          conversationId: id,
+          draftId: rascunho,
+        }),
+      };
+    } else {
+      const leitura = await lerUltimoRascunhoAtivo(db, {
         organizationId: activeOrg.orgId,
         conversationId: id,
-        draftId: rascunho,
-      }),
-    };
+      });
+      if (leitura) {
+        avisoDeRascunho = {
+          conversationId: id,
+          leitura,
+        };
+      }
+    }
   }
   return <InboxLayout initialSelectedId={id ?? null} rascunho={avisoDeRascunho} />;
 }

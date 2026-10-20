@@ -13,6 +13,7 @@ import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { validateRequest } from "@/lib/schemas";
 import {
   criarRascunho,
+  lerUltimoRascunhoAtivo,
   JANELA_MAXIMA_HORAS,
   JANELA_PADRAO_HORAS,
   TEXTO_MAXIMO,
@@ -21,6 +22,35 @@ import {
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+/**
+ * GET /api/v1/conversations/[id]/drafts — busca o rascunho ativo não consumido da conversa.
+ */
+export async function GET(req: NextRequest, ctx: Ctx): Promise<Response> {
+  const requestId = randomUUID();
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "conversations",
+    role: "agent",
+    scope: "mcp:read",
+  });
+  if (!authz.ok) return authz.response;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? IDIOMA_PADRAO);
+
+  const { id } = await ctx.params;
+  if (!z.string().uuid().safeParse(id).success) {
+    return fail("validation_error", t("Conversa inválida."), 422, { requestId });
+  }
+
+  const { supabase, organizationId } = authz;
+  const draft = await lerUltimoRascunhoAtivo(supabase, {
+    organizationId,
+    conversationId: id,
+  });
+
+  return ok({ draft }, { requestId });
+}
+
 
 /** O que a rota devolve — é também o que o recibo de idempotência guarda. */
 type Resposta = { draft_id: string; url: string };

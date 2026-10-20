@@ -7,6 +7,7 @@ import {
   ehUuid,
   JANELA_PADRAO_HORAS,
   lerRascunho,
+  lerUltimoRascunhoAtivo,
   TEXTO_MAXIMO,
   urlDoRascunho,
 } from "@/lib/inbox/rascunho-sugerido";
@@ -87,6 +88,8 @@ function bancoFake(drafts: Linha[], conversas: Linha[]) {
         filtros.push({ coluna, valor: { gt: valor } });
         return q;
       },
+      order: () => q,
+      limit: () => q,
       maybeSingle: async () => {
         consultas.push({ tabela, filtros: [...filtros] });
         if (inserts) {
@@ -357,4 +360,48 @@ describe("consumirRascunho — o clique de quem atende", () => {
     ).toBe(false);
     expect(drafts[0]!.consumed_at).toBeNull();
   });
+
+  describe("lerUltimoRascunhoAtivo — carregamento automático no Inbox", () => {
+    it("devolve o rascunho sugerido quando ativo e não consumido", async () => {
+      const drafts = [rascunho()];
+      const { cliente } = bancoFake(drafts, [conversaA]);
+
+      const leitura = await lerUltimoRascunhoAtivo(cliente, {
+        organizationId: ORG_A,
+        conversationId: CONV_A,
+      });
+
+      expect(leitura).toEqual({
+        estado: "sugerido",
+        draftId: DRAFT,
+        conversationId: CONV_A,
+        texto: "Sua cobrança venceu hoje.",
+        origem: "erp",
+      });
+    });
+
+    it("devolve null quando não há rascunho para a conversa", async () => {
+      const { cliente } = bancoFake([], [conversaA]);
+
+      const leitura = await lerUltimoRascunhoAtivo(cliente, {
+        organizationId: ORG_A,
+        conversationId: CONV_A,
+      });
+
+      expect(leitura).toBeNull();
+    });
+
+    it("devolve null quando o rascunho já foi consumido", async () => {
+      const drafts = [rascunho({ consumed_at: new Date().toISOString() })];
+      const { cliente } = bancoFake(drafts, [conversaA]);
+
+      const leitura = await lerUltimoRascunhoAtivo(cliente, {
+        organizationId: ORG_A,
+        conversationId: CONV_A,
+      });
+
+      expect(leitura).toBeNull();
+    });
+  });
 });
+

@@ -37,6 +37,7 @@ import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
 import type { AvisoDeRascunho } from "@/lib/inbox/rascunho-sugerido";
 import { buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
+import { useActiveConversationDraft } from "@/hooks/inbox/useActiveConversationDraft";
 
 /**
  * QUAL COLUNA APARECE NO CELULAR — as duas saem da MESMA pergunta.
@@ -200,6 +201,38 @@ export function InboxLayout({ initialSelectedId = null, rascunho = null }: Inbox
    */
   const [rascunhoVivo, setRascunhoVivo] = useState(rascunho);
   if (rascunhoVivo && selectedId !== rascunhoVivo.conversationId) setRascunhoVivo(null);
+
+  const { data: draftAtivo } = useActiveConversationDraft(selectedId);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setRascunhoVivo(null);
+      return;
+    }
+    // Se a prop da URL trouxe um rascunho para a conversa selecionada, mantém
+    if (rascunho && rascunho.conversationId === selectedId) {
+      setRascunhoVivo(rascunho);
+      return;
+    }
+    // Se a consulta achou um rascunho ativo não consumido para esta conversa
+    if (draftAtivo && draftAtivo.estado === "sugerido") {
+      setRascunhoVivo((atual) => {
+        if (
+          atual?.conversationId === selectedId &&
+          atual.leitura.estado === "sugerido" &&
+          atual.leitura.draftId === draftAtivo.draftId
+        ) {
+          return atual;
+        }
+        return {
+          conversationId: selectedId,
+          leitura: draftAtivo,
+        };
+      });
+    } else if (draftAtivo === null) {
+      setRascunhoVivo((atual) => (atual?.conversationId === selectedId ? null : atual));
+    }
+  }, [selectedId, draftAtivo, rascunho]);
 
   useEffect(() => {
     if (ultimoIdNaUrl.current === idNaUrl) return;

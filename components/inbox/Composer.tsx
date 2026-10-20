@@ -1,4 +1,5 @@
 "use client";
+import { useQueryClient } from "@tanstack/react-query";
 import { useT } from "@/hooks/i18n/useT";
 import {
   forwardRef,
@@ -118,6 +119,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   ref,
 ) {
   const t = useT();
+  const queryClient = useQueryClient();
   const [text, setText] = useState(initialDraft);
   // O aviso some no primeiro ENVIO: depois do clique o rascunho foi usado, e
   // deixar a faixa prometendo texto que já saiu seria mentira de tela.
@@ -228,6 +230,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       .post(`/api/v1/conversations/${conversationId}/drafts/consume`, {
         draft_id: leitura.draftId,
       })
+      .then(() => {
+        void queryClient.invalidateQueries({
+          queryKey: ["conversation_draft", conversationId],
+        });
+      })
       .catch(() => {
         /* silêncio: ver docstring */
       });
@@ -330,6 +337,19 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                 avisoDeRascunhoIndisponivel(rascunho.leitura.motivo, t)
               )}
             </p>
+            {rascunho.leitura.estado === "sugerido" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setRascunhoUsado(true);
+                  setText("");
+                }}
+                className="text-muted-foreground hover:text-foreground text-xs p-0.5 rounded transition-colors"
+                title={t("Descartar rascunho")}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         )}
         <div className="mb-1.5 flex gap-1">

@@ -229,3 +229,38 @@ export async function lerRascunho(
     origem: data.source as string,
   };
 }
+
+/**
+ * Lê o último rascunho ativo não consumido da conversa (para carregamento automático
+ * na tela do Inbox sem exigir que o ID venha explicitamente na URL).
+ *
+ * Retorna null se não houver rascunho pendente, ou se já tiver sido consumido/expirado.
+ */
+export async function lerUltimoRascunhoAtivo(
+  db: SupabaseClient,
+  entrada: { organizationId: string; conversationId: string },
+): Promise<LeituraDoRascunho | null> {
+  if (!ehUuid(entrada.conversationId)) return null;
+
+  const { data } = await db
+    .from("conversation_drafts")
+    .select("id, conversation_id, body, source, consumed_at, expires_at")
+    .eq("organization_id", entrada.organizationId)
+    .eq("conversation_id", entrada.conversationId)
+    .is("consumed_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  return {
+    estado: "sugerido",
+    draftId: data.id as string,
+    conversationId: data.conversation_id as string,
+    texto: data.body as string,
+    origem: data.source as string,
+  };
+}
+
