@@ -13,14 +13,9 @@ DO $$
 DECLARE
   v_user_id uuid;
 BEGIN
-  -- Obtem um usuario admin da organizacao para atribuir o token
-  SELECT user_id INTO v_user_id FROM public.user_roles 
-   WHERE organization_id = '977fbdf5-6349-4a26-be99-a359618f9f33' 
-   ORDER BY created_at ASC LIMIT 1;
-
-  IF v_user_id IS NULL THEN
-    SELECT id INTO v_user_id FROM auth.users ORDER BY created_at ASC LIMIT 1;
-  END IF;
+  -- Obtem um usuario admin para atribuir o token
+  SELECT id INTO v_user_id FROM auth.users ORDER BY created_at ASC LIMIT 1;
+  v_user_id := coalesce(v_user_id, 'c7616783-35cf-4aef-9646-67eda208bd89'::uuid);
 
   INSERT INTO public.api_tokens (
     id,
@@ -250,3 +245,4 @@ UNION ALL
 SELECT 'automation_rules', count(*) FROM public.automation_rules WHERE name LIKE '%Lojao%'
 UNION ALL
 SELECT 'contacts_ativos', count(*) FROM public.contacts WHERE force_human = false;
+
