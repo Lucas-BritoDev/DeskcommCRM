@@ -81,7 +81,78 @@ AFTER INSERT OR UPDATE ON public.contacts
 FOR EACH ROW EXECUTE FUNCTION public.fn_sync_contact_to_lojao();
 
 
--- 3. Gatilho no CRM: sempre que criar ou mover lead com medidas, cria o orcamento no Lojao
+-- 3. Gatilho no CRM: direto nas MENSAGENS INBOUND do WhatsApp
+-- Assim que o cliente envia medidas no chat, cria o orcamento no Lojao imediatamente
+CREATE OR REPLACE FUNCTION public.fn_sync_message_orcamento_to_lojao()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $function$
+DECLARE
+  v_contact RECORD;
+  v_lead_payload jsonb;
+BEGIN
+  -- Apenas para inbound na organizacao LBODEVAPPS (Lojao dos Marmores)
+  IF NEW.organization_id <> '977fbdf5-6349-4a26-be99-a359618f9f33' OR NEW.direction <> 'inbound' THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.body IS NULL OR btrim(NEW.body) = '' THEN
+    RETURN NEW;
+  END IF;
+
+  -- Dispara se a mensagem tiver dimensoes (ex: 1,20 x 0,60 ou 2x1)
+  IF NOT (NEW.body ~* '(\d+[\.,]?\d*)\s*(x|por|\*)\s*(\d+[\.,]?\d*)') THEN
+    RETURN NEW;
+  END IF;
+
+  -- Busca contato
+  SELECT name, display_name, address_book_name, phone_number, email
+    INTO v_contact
+    FROM public.contacts
+   WHERE id = NEW.contact_id;
+
+  -- Monta envelope
+  v_lead_payload := jsonb_build_object(
+    'lead', jsonb_build_object(
+      'id', 'msg-' || NEW.id::text,
+      'title', NEW.body,
+      'description', NEW.body,
+      'organization_id', NEW.organization_id,
+      'contact_id', NEW.contact_id,
+      'contato_nome', coalesce(v_contact.name, v_contact.display_name, v_contact.address_book_name, 'Cliente WhatsApp'),
+      'contato_telefone', v_contact.phone_number
+    ),
+    'organization_id', NEW.organization_id
+  );
+
+  -- Dispara chamada para a Edge Function do Lojao (Supabase Nuvem)
+  BEGIN
+    PERFORM net.http_post(
+      url := 'https://knypuvtjodjazxdizguz.supabase.co/functions/v1/lojao-orcamento/crm/orcamento?modo=producao',
+      body := v_lead_payload,
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'x-webhook-secret', '3cfc7ddcf0d909e9b4eb774a8dd7ca38f76e92ae8b5c1f9aa8c816baa3975fca',
+        'apikey', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtueXB1dnRqb2RqYXp4ZGl6Z3V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0NzUyOTMsImV4cCI6MjA2NzA1MTI5M30.2C99hJlWZW47DEwhJHPd-xyx9hLGjz_Edl3TUfQ4xz0',
+        'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtueXB1dnRqb2RqYXp4ZGl6Z3V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE0NzUyOTMsImV4cCI6MjA2NzA1MTI5M30.2C99hJlWZW47DEwhJHPd-xyx9hLGjz_Edl3TUfQ4xz0'
+      )
+    );
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'Falha ao sincronizar mensagem/orcamento com o Lojao: %', SQLERRM;
+  END;
+
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS trg_messages_sync_lojao_orcamento ON public.messages;
+CREATE TRIGGER trg_messages_sync_lojao_orcamento
+AFTER INSERT ON public.messages
+FOR EACH ROW EXECUTE FUNCTION public.fn_sync_message_orcamento_to_lojao();
+
+
+-- 4. Gatilho no CRM: sempre que criar ou mover lead com medidas, cria o orcamento no Lojao
 CREATE OR REPLACE FUNCTION public.fn_sync_lead_orcamento_to_lojao()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -97,7 +168,7 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- Verifica se ha dados suficientes para orcar
+  -- Dispara se tiver medidas estruturadas, medidas no texto/titulo ou tag orcamento
   IF (NEW.custom_fields ? 'medidas') OR 
      (NEW.title ~* '(\d+[\.,]?\d*)\s*(x|por|\*)\s*(\d+[\.,]?\d*)') OR
      (NEW.description ~* '(\d+[\.,]?\d*)\s*(x|por|\*)\s*(\d+[\.,]?\d*)') OR
@@ -145,7 +216,7 @@ BEGIN
     'organization_id', NEW.organization_id
   );
 
-  -- Envia para a Edge Function lojao-orcamento no Supabase da Nuvem
+  -- Dispara chamada para a Edge Function do Lojao (Supabase Nuvem)
   BEGIN
     PERFORM net.http_post(
       url := 'https://knypuvtjodjazxdizguz.supabase.co/functions/v1/lojao-orcamento/crm/orcamento?modo=producao',
@@ -171,7 +242,7 @@ AFTER INSERT OR UPDATE ON public.crm_leads
 FOR EACH ROW EXECUTE FUNCTION public.fn_sync_lead_orcamento_to_lojao();
 
 
--- 4. Garante que conversas nao fiquem presas em silencio
+-- 5. Desbloqueia atendimentos silenciados
 UPDATE public.conversations 
    SET bot_silenced_until = NULL 
  WHERE organization_id = '977fbdf5-6349-4a26-be99-a359618f9f33'
@@ -179,7 +250,9 @@ UPDATE public.conversations
 
 COMMIT;
 
--- Validacao
+-- Validacao final
 SELECT 'contacts_trigger' as item, count(*) FROM pg_trigger WHERE tgname = 'trg_contacts_sync_lojao'
+UNION ALL
+SELECT 'messages_trigger', count(*) FROM pg_trigger WHERE tgname = 'trg_messages_sync_lojao_orcamento'
 UNION ALL
 SELECT 'leads_trigger', count(*) FROM pg_trigger WHERE tgname = 'trg_leads_sync_lojao_orcamento';
