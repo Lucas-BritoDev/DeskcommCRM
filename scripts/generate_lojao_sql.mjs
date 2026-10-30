@@ -771,3 +771,4 @@ UNION ALL SELECT 'pedidos', count(*) FROM public.pedidos;
 
 fs.writeFileSync('supabase/lojao_complete.sql', sql, 'utf8');
 console.log('Successfully wrote supabase/lojao_complete.sql (size: ' + (sql.length / 1024).toFixed(1) + ' KB)');
+
