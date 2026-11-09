@@ -81,8 +81,8 @@ AFTER INSERT OR UPDATE ON public.contacts
 FOR EACH ROW EXECUTE FUNCTION public.fn_sync_contact_to_lojao();
 
 
--- 3. Gatilho no CRM: direto nas MENSAGENS INBOUND do WhatsApp
--- Assim que o cliente envia medidas no chat, cria o orcamento no Lojao imediatamente
+-- 3. Gatilho no CRM: direto nas MENSAGENS INBOUND do WhatsApp (MULTIMODAL: Texto, Áudios e Fotos/PDFs)
+-- Assim que o cliente envia medidas no chat ou áudio/foto transcrito, cria o orcamento no Lojao imediatamente
 CREATE OR REPLACE FUNCTION public.fn_sync_message_orcamento_to_lojao()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -91,19 +91,63 @@ AS $function$
 DECLARE
   v_contact RECORD;
   v_lead_payload jsonb;
+  v_texto text;
+  v_texto_conversa text;
+  v_tem_medidas boolean := false;
+  v_pattern_medidas text := '(\d+[\.,]?\d*)\s*(?:m|cm|metros?)?\s*(x|por|\*|de largura|de profundidade)\s*(\d+[\.,]?\d*)';
+  v_pattern_itens text := '(?:nicho|bancada|pia|lavat[oó]rio|balc[aã]o|soleira|peitoril|prateleira|rodap[eé]|divis[oó]ria|filete)';
 BEGIN
   -- Apenas para inbound na organizacao LBODEVAPPS (Lojao dos Marmores)
   IF NEW.organization_id <> '977fbdf5-6349-4a26-be99-a359618f9f33' OR NEW.direction <> 'inbound' THEN
     RETURN NEW;
   END IF;
 
-  IF NEW.body IS NULL OR btrim(NEW.body) = '' THEN
+  -- Se for UPDATE: apenas processa se body ou media_derived_text foram alterados
+  IF TG_OP = 'UPDATE' THEN
+    IF coalesce(OLD.body, '') = coalesce(NEW.body, '')
+       AND coalesce(OLD.media_derived_text, '') = coalesce(NEW.media_derived_text, '') THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+
+  -- Extrai texto da mensagem atual (incluindo áudio transcrito, OCR de fotos e PDFs)
+  v_texto := coalesce(nullif(btrim(NEW.body), ''), '') || ' ' || coalesce(nullif(btrim(NEW.media_derived_text), ''), '');
+  v_texto := btrim(v_texto);
+
+  IF v_texto = '' THEN
     RETURN NEW;
   END IF;
 
-  -- Dispara se a mensagem tiver dimensoes (ex: 1,20 x 0,60 ou 2x1)
-  IF NOT (NEW.body ~* '(\d+[\.,]?\d*)\s*(x|por|\*)\s*(\d+[\.,]?\d*)') THEN
+  -- Busca o histórico recente da conversa (últimas mensagens dos últimos 45 min)
+  -- para que se o cliente falou medidas no áudio/texto e a pedra em outra mensagem,
+  -- ambos os dados sejam combinados e enviados ao motor de cálculo do Lojão!
+  SELECT string_agg(coalesce(body, '') || ' ' || coalesce(media_derived_text, ''), ' ' ORDER BY created_at ASC)
+    INTO v_texto_conversa
+    FROM public.messages
+   WHERE conversation_id = NEW.conversation_id
+     AND direction = 'inbound'
+     AND created_at >= (NOW() - interval '45 minutes');
+
+  v_texto_conversa := coalesce(nullif(btrim(v_texto_conversa), ''), v_texto);
+
+  -- Verifica se há dimensões na mensagem atual OU no histórico recente da conversa
+  IF (v_texto ~* v_pattern_medidas) 
+     OR (v_texto_conversa ~* v_pattern_medidas)
+     OR (v_texto ~* v_pattern_itens AND v_texto ~* '(\d+[\.,]?\d*)')
+     OR (v_texto_conversa ~* v_pattern_itens AND v_texto_conversa ~* '(\d+[\.,]?\d*)') THEN
+    v_tem_medidas := true;
+  END IF;
+
+  IF NOT v_tem_medidas THEN
     RETURN NEW;
+  END IF;
+
+  -- Se for UPDATE e o OLD já tinha exatamente o mesmo texto de medidas processado, evita chamadas duplicadas
+  IF TG_OP = 'UPDATE' THEN
+    IF coalesce(OLD.media_derived_text, '') = coalesce(NEW.media_derived_text, '')
+       AND coalesce(OLD.body, '') = coalesce(NEW.body, '') THEN
+      RETURN NEW;
+    END IF;
   END IF;
 
   -- Busca contato
@@ -112,17 +156,19 @@ BEGIN
     FROM public.contacts
    WHERE id = NEW.contact_id;
 
-  -- Monta envelope
+  -- Monta envelope enriquecido com o contexto da conversa e a mensagem
   v_lead_payload := jsonb_build_object(
     'lead', jsonb_build_object(
       'id', 'msg-' || NEW.id::text,
-      'title', NEW.body,
-      'description', NEW.body,
+      'title', v_texto,
+      'description', v_texto_conversa,
       'organization_id', NEW.organization_id,
       'contact_id', NEW.contact_id,
+      'conversa_id', NEW.conversation_id,
       'contato_nome', coalesce(v_contact.name, v_contact.display_name, v_contact.address_book_name, 'Cliente WhatsApp'),
       'contato_telefone', v_contact.phone_number
     ),
+    'conversa_id', NEW.conversation_id,
     'organization_id', NEW.organization_id
   );
 
@@ -139,7 +185,7 @@ BEGIN
       )
     );
   EXCEPTION WHEN OTHERS THEN
-    RAISE WARNING 'Falha ao sincronizar mensagem/orcamento com o Lojao: %', SQLERRM;
+    RAISE WARNING 'Falha ao sincronizar mensagem/orcamento multimodal com o Lojao: %', SQLERRM;
   END;
 
   RETURN NEW;
@@ -148,7 +194,7 @@ $function$;
 
 DROP TRIGGER IF EXISTS trg_messages_sync_lojao_orcamento ON public.messages;
 CREATE TRIGGER trg_messages_sync_lojao_orcamento
-AFTER INSERT ON public.messages
+AFTER INSERT OR UPDATE OF body, media_derived_text ON public.messages
 FOR EACH ROW EXECUTE FUNCTION public.fn_sync_message_orcamento_to_lojao();
 
 
